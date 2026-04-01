@@ -1,3 +1,8 @@
+global output_func
+extern num1
+extern num2
+extern operator_p
+
 section .data
 
 ;reserving space for variables.
@@ -8,19 +13,29 @@ section .bss
 	result   resq 1    ;save_result
 	output   resb 50   ;keep info to screen output
 section .text
-	global _start
-_start:
-	mov qword [operand1], 8
-        mov qword [operand2], 6
-        mov byte [operator], '*'
+output_func:
+
+    mov r12, qword[num1]
+    mov qword[operand1], r12
+    mov r12, qword[num2]
+    mov qword[operand2], r12
+    mov r12b, byte[operator_p]
+    mov byte[operator], r12b
+
 operating:	
 	mov rax, qword[operand1]
 	cmp rax, 0
 	jl exit_program
+    
+    cmp rax, 9999
+    jg exit_program
    
 	mov rbx, qword[operand2]
 	cmp rbx,0
 	jl exit_program
+
+    cmp rbx, 9999
+    jg exit_program
 
 	mov cl,  byte[operator]
 
@@ -36,6 +51,8 @@ operating:
 
 add_function:
 	add rax, rbx
+    cmp rax, 9999
+    jg exit_program
 	jmp save_result
 
 sub_function:
@@ -48,6 +65,8 @@ sub_function:
 
 mul_function:
 	imul rax, rbx
+    cmp rax, 9999
+    jg exit_program
 	jmp save_result
 
 div_function:
@@ -91,9 +110,7 @@ pop_loop:
         syscall               
 
 exit_program:
-	mov rax, 60            
-        mov rdi, 0              
-        syscall
+    ret
 
 
 
