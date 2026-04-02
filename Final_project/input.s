@@ -184,13 +184,6 @@ done_check:
 ; null terminate clean string
 mov byte [rdi], 0
 
-; DEBUG print clean string
-mov rax, SYS_write
-mov rdi, STD_write
-mov rsi, clean    
-mov rdx, maxInput
-syscall
-
 ret
 
 ; ERROR case, print error message and loop back to input
