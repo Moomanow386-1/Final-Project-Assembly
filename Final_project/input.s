@@ -8,6 +8,24 @@ section .data
   errMsg db "Error: invalid input", 10
   errLen equ $-errMsg
 
+  SYS_write equ 1
+  SYS_read equ 0
+
+  STD_write equ 1
+  STD_read equ 0
+
+  maxInput equ 50
+
+  Enter_ASCII equ 10
+  Null_ASCII equ 0
+  Space_ASCII equ 32
+  Zero_ASCII equ 48
+  Nine_ASCII equ 57
+  Plus_ASCII equ 43
+  Minus_ASCII equ 45
+  Mul_ASCII equ 42
+  Div_ASCII equ 47
+ 
 section .bss
   input resb 50
   clean resb 50
@@ -15,165 +33,174 @@ section .bss
 section .text
 input_func:
 
-; LOOP รับ input จนถูก
+; main loop
 input_start:
 
 ; print prompt
-  mov rax, 1              ; เลือก syscall write
-  mov rdi, 1              ; file descriptor = stdout
-  mov rsi, prompt         ; address ของข้อความ
-  mov rdx, promptLen      ; ความยาวข้อความ
-  syscall                 ; เรียก OS ให้ print
+  mov rax, SYS_write              
+  mov rdi, STD_write            
+  mov rsi, prompt
+  mov rdx, promptLen
+  syscall              
 
 ; read input
-  mov rax, 0              ; syscall read
-  mov rdi, 0              ; stdin (keyboard)
-  mov rsi, input          ; buffer ปลายทาง
-  mov rdx, 50             ; อ่านสูงสุด 50 byte
-  syscall                 ; อ่าน input
+  mov rax, SYS_read          
+  mov rdi, STD_read  
+  mov rsi, input        
+  mov rdx, maxInput          
+  syscall              
 
-  cmp rax, 50
+; check overflow buffer (case>buffer)
+  cmp rax, maxInput
   jb ok_read
 
+;Delete overflow buffer
   flush_loop:
-    mov rax, 0
-    mov rdi, 0
+    mov rax, SYS_read
+    mov rdi, STD_read
     mov rsi, input
     mov rdx, 1
     syscall
 
-    cmp byte [input], 10
+    ; if != /n
+    cmp byte [input], Enter_ASCII
     jne flush_loop
 
+; loop read input
 ok_read:
 
-; กัน input ยาวเกิน (buffer เต็ม = เสี่ยงไม่มี newline)
-  cmp rax, 50             ; rax = จำนวน byte ที่อ่านได้
-  je error_input          ; ถ้าเต็ม buffer → error
+  ;check buffer overflow (case==buffer full but no \n)
+  cmp rax, maxInput          
+  je error_input        
 
-; CLEAN + VALIDATE
-  mov rsi, input          ; rsi = pointer อ่าน
-  mov rdi, clean          ; rdi = pointer เขียน
+;set pointers
+  mov rsi, input      
+  mov rdi, clean  
 
-  xor rcx, rcx            ; rcx = operator count = 0
-  xor rbx, rbx            ; rbx = digit count = 0
+;reset registers == 0
+  xor rcx, rcx
+  xor rbx, rbx
 
+;loop check case input
 clean_loop:
-  mov al, byte [rsi]      ; อ่าน char 1 ตัวจาก input
+  ;read char
+  mov al, byte [rsi]
 
-; จบเมื่อ newline
-  cmp al, 10              ; '\n'
-  je done_check           ; ไป validate
+;case char = Enter(/n)
+  cmp al, Enter_ASCII
+  je done_check          
 
-; กันหลุด memory
-  cmp al, 0               ; null byte
+;case char = null
+  cmp al, Null_ASCII
   je done_check
 
-; ข้าม space
-  cmp al, ' '             ; ถ้าเป็นช่องว่าง
-  je skip_char            ; ไม่ copy
+;case char = space
+  cmp al, Space_ASCII            
+  je skip_char        
 
-; เช็ค digit
-  cmp al, '0'             ; ถ้าน้อยกว่า '0'
-  jb check_operator       ; ไปเช็ค operator
-  cmp al, '9'
-  jbe is_digit            ; อยู่ในช่วง digit
+;case char = digit range '0'-'9' ASCII 48-57
+  cmp al, Zero_ASCII          
+  jb check_operator  ; >'0' go to operator
+  cmp al, Nine_ASCII
+  jbe is_digit       ; <= '9' go to digit
 
-; เช็ค operator
+;case char = operator + - * /
 check_operator:
-  cmp al, '+'
+  cmp al, Plus_ASCII
   je is_operator
-  cmp al, '-'
+  cmp al, Minus_ASCII
   je is_operator
-  cmp al, '*'
+  cmp al, Mul_ASCII
   je is_operator
-  cmp al, '/'
+  cmp al, Div_ASCII
   je is_operator
 
-  jmp error_input         ; ตัวอื่น = invalid
+  ;other char = error
+  jmp error_input        
 
 ; digit
 is_digit:
-  inc rbx                 ; นับจำนวน digit
-  jmp copy_char           ; ไป copy
+  inc rbx            
+  jmp copy_char          
 
 ; operator
 is_operator:
-  inc rcx                 ; นับ operator
+  inc rcx    
+  ;check operator must be only 1          
   cmp rcx, 1
-  ja error_input          ; เกิน 1 ตัว = error
+  ja error_input        
 
-; copy ลง clean
+; copy char to clean
 copy_char:
-  mov byte [rdi], al      ; เขียน char ลง clean
-  inc rdi                 ; pointer clean++
+  mov byte [rdi], al  
+  inc rdi              
 
+;next char because space
 skip_char:
-  inc rsi                 ; pointer input++
-  jmp clean_loop          ; loop ต่อ
+  inc rsi            
+  jmp clean_loop        
 
-; FINAL VALIDATION
+;loop check end
 done_check:
 
-; ต้องมี operator 1 ตัว
+;check operator must be only 1
   cmp rcx, 1
   jne error_input
 
-; ต้องมี digit อย่างน้อย 2 ตัว
+;check digit must be at least 2
   cmp rbx, 2
   jb error_input
 
-; string ต้องไม่ว่าง
-  mov rax, rdi            ; rax = end pointer
-  sub rax, clean          ; rax = length
+;check space only
+  mov rax, rdi          
+  sub rax, clean    
   cmp rax, 0
   je error_input
 
-; operator ห้ามอยู่หน้า
-  mov al, byte [clean]    ; ตัวแรก
+; check operator position first
+  mov al, byte [clean]
+  cmp al, Plus_ASCII
+  je error_input
+  cmp al, Minus_ASCII
+  je error_input
+  cmp al, Mul_ASCII
+  je error_input
+  cmp al, Div_ASCII
+  je error_input
 
-  cmp al, '+'
-  je error_input
-  cmp al, '-'
-  je error_input
-  cmp al, '*'
-  je error_input
-  cmp al, '/'
-  je error_input
-
-; operator ห้ามอยู่ท้าย
-  mov rax, rdi            ; pointer end
-  dec rax                 ; ไปตัวสุดท้าย
+; check operator position last
+  mov rax, rdi            
+  dec rax                ; point to last char
   mov al, byte [rax]
+  cmp al, Plus_ASCII
+  je error_input
+  cmp al, Minus_ASCII
+  je error_input
+  cmp al, Mul_ASCII
+  je error_input
+  cmp al, Div_ASCII
+  je error_input
 
-  cmp al, '+'
-  je error_input
-  cmp al, '-'
-  je error_input
-  cmp al, '*'
-  je error_input
-  cmp al, '/'
-  je error_input
-
-; จบ string
-mov byte [rdi], 0       ; null terminate
+; null terminate clean string
+mov byte [rdi], 0
 
 ; DEBUG print clean string
-;mov rax, 1              ; syscall write
-;mov rdi, 1              ; stdout
-;mov rsi, clean          ; address ของ clean
-;mov rdx, 50
-;syscall
+mov rax, SYS_write
+mov rdi, STD_write
+mov rsi, clean    
+mov rdx, maxInput
+syscall
 
 ret
 
-; ERROR HANDLER
+; ERROR case, print error message and loop back to input
 error_input:
-  mov rax, 1              ; syscall write
-  mov rdi, 1              ; stdout
+  mov rax, SYS_write    
+  mov rdi, STD_write    
   mov rsi, errMsg         ; error message
   mov rdx, errLen
   syscall
 
-  jmp input_start         ; วนรับใหม่
+  jmp input_start
+
 
